@@ -1,6 +1,6 @@
 [package]
 name = "rate_limit_wrapper"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Marco Napetti"]
 repository = "https://github.com/nappa85/rate_limit_wrapper"
