@@ -21,7 +21,7 @@ use tokio::time::Instant;
 ///   let request = rm.as_ref().get("https://www.rust-lang.org").build().unwrap();
 ///
 ///   // Apply rate limit
-///   let client = rm.rate_limit().await;
+///   let client = rm.rate_limit(1).await;
 ///   client.execute(request).await.unwrap();
 /// }
 /// ```
@@ -63,8 +63,11 @@ impl<T> RateLimit<T> {
     }
 
     #[must_use]
-    pub fn rate_limit(&self) -> RateLimitFuture<T> {
-        RateLimitFuture(self)
+    pub fn rate_limit(&self, weight: usize) -> RateLimitFuture<T> {
+        RateLimitFuture {
+            weight,
+            inner: self,
+        }
     }
 }
 
@@ -74,13 +77,16 @@ impl<T> AsRef<T> for RateLimit<T> {
     }
 }
 
-pub struct RateLimitFuture<'a, T>(&'a RateLimit<T>);
+pub struct RateLimitFuture<'a, T> {
+    weight: usize,
+    inner: &'a RateLimit<T>,
+}
 
 impl<'a, T> Future for RateLimitFuture<'a, T> {
     type Output = &'a T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.0.rate.lock().expect("Poisoned lock");
+        let mut this = self.inner.rate.lock().expect("Poisoned lock");
 
         if Pin::new(&mut this.sleep).poll(cx).is_ready() {
             this.current = 0;
@@ -91,10 +97,10 @@ impl<'a, T> Future for RateLimitFuture<'a, T> {
             this.wakers.drain(..).for_each(Waker::wake);
         }
 
-        if this.current < this.size {
-            this.current += 1;
+        if this.current + self.weight <= this.size {
+            this.current += self.weight;
 
-            Poll::Ready(&self.0.inner)
+            Poll::Ready(&self.inner.inner)
         } else {
             let waker = cx.waker();
             // Avoid registering the same waker multiple times
@@ -118,14 +124,14 @@ mod tests {
     async fn rate_limit() {
         let rt = RateLimit::new(2, Duration::from_secs(1), true);
         let start = Instant::now();
-        assert!(*rt.rate_limit().await);
-        assert!(*rt.rate_limit().await);
+        assert!(*rt.rate_limit(1).await);
+        assert!(*rt.rate_limit(1).await);
         assert!(start.elapsed().as_secs_f64() < 1.0);
-        assert!(*rt.rate_limit().await);
-        assert!(*rt.rate_limit().await);
+        assert!(*rt.rate_limit(1).await);
+        assert!(*rt.rate_limit(1).await);
         assert!(start.elapsed().as_secs_f64() > 1.0);
-        assert!(*rt.rate_limit().await);
-        assert!(*rt.rate_limit().await);
+        assert!(*rt.rate_limit(1).await);
+        assert!(*rt.rate_limit(1).await);
         assert!(start.elapsed().as_secs_f64() > 2.0);
     }
 
@@ -134,16 +140,16 @@ mod tests {
         let rt = RateLimit::new(2, Duration::from_secs(1), true);
         let start = Instant::now();
         let future1 = async {
-            assert!(*rt.rate_limit().await);
-            assert!(*rt.rate_limit().await);
+            assert!(*rt.rate_limit(1).await);
+            assert!(*rt.rate_limit(1).await);
         };
         let future2 = async {
-            assert!(*rt.rate_limit().await);
-            assert!(*rt.rate_limit().await);
+            assert!(*rt.rate_limit(1).await);
+            assert!(*rt.rate_limit(1).await);
         };
         let future3 = async {
-            assert!(*rt.rate_limit().await);
-            assert!(*rt.rate_limit().await);
+            assert!(*rt.rate_limit(1).await);
+            assert!(*rt.rate_limit(1).await);
         };
         let _ = tokio::join!(future1, future2, future3);
         assert!(start.elapsed().as_secs_f64() > 2.0);
@@ -154,16 +160,16 @@ mod tests {
         let rt = RateLimit::new(2, Duration::from_secs(1), true);
         let start = Instant::now();
         let future1 = async {
-            assert!(*rt.rate_limit().await);
-            assert!(*rt.rate_limit().await);
+            assert!(*rt.rate_limit(1).await);
+            assert!(*rt.rate_limit(1).await);
         };
         let future2 = async {
-            assert!(*rt.rate_limit().await);
-            assert!(*rt.rate_limit().await);
+            assert!(*rt.rate_limit(1).await);
+            assert!(*rt.rate_limit(1).await);
         };
         let future3 = async {
-            assert!(*rt.rate_limit().await);
-            assert!(*rt.rate_limit().await);
+            assert!(*rt.rate_limit(1).await);
+            assert!(*rt.rate_limit(1).await);
         };
         tokio::select!(
             _ = future1 => {},
@@ -180,22 +186,22 @@ mod tests {
         let future1 = tokio::spawn({
             let rt = rt.clone();
             async move {
-                assert!(*rt.rate_limit().await);
-                assert!(*rt.rate_limit().await);
+                assert!(*rt.rate_limit(1).await);
+                assert!(*rt.rate_limit(1).await);
             }
         });
         let future2 = tokio::spawn({
             let rt = rt.clone();
             async move {
-                assert!(*rt.rate_limit().await);
-                assert!(*rt.rate_limit().await);
+                assert!(*rt.rate_limit(1).await);
+                assert!(*rt.rate_limit(1).await);
             }
         });
         let future3 = tokio::spawn({
             let rt = rt.clone();
             async move {
-                assert!(*rt.rate_limit().await);
-                assert!(*rt.rate_limit().await);
+                assert!(*rt.rate_limit(1).await);
+                assert!(*rt.rate_limit(1).await);
             }
         });
         let _ = tokio::join!(future1, future2, future3);
