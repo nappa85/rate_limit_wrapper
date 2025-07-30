@@ -17,7 +17,7 @@ async fn main() {
   let request = rm.as_ref().get("https://www.rust-lang.org").build().unwrap();
 
   // Apply rate limit
-  let client = rm.rate_limit().await;
+  let client = rm.rate_limit(1).await;
   client.execute(request).await.unwrap();
 }
 ```
