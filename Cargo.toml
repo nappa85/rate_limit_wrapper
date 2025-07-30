@@ -1,0 +1,24 @@
+[package]
+name = "rate_limit_wrapper"
+version = "0.1.0"
+edition = "2024"
+authors = ["Marco Napetti"]
+repository = "https://github.com/nappa85/rate_limit_wrapper"
+documentation = "https://docs.rs/rate_limit_wrapper"
+readme = "README.md"
+license = "WTFPL"
+description = "Async rate limit wrapper to easily manage resources"
+categories = ["asynchronous", "concurrency", "web-programming"]
+keywords = ["async", "rate-limit", "rate", "limit"]
+
+[dependencies]
+tokio = { version = "1", features = ["sync", "time"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false }
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
